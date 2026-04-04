@@ -1,0 +1,10 @@
+torch
+torch-geometric
+torchvision
+scikit-image
+scikit-learn
+opencv-python-headless
+numpy
+matplotlib
+seaborn
+tqdm

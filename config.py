@@ -1,0 +1,75 @@
+"""
+config.py — Central configuration for the Dual GNN Foraminifera Classification Pipeline.
+"""
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+@dataclass
+class Config:
+    # ── Paths ──────────────────────────────────────────────────────────────
+    project_root: Path = Path(__file__).resolve().parent
+    data_dir: Path = None          # set via CLI or defaults to project_root/dataset/images
+    processed_dir: Path = None     # cached graphs
+    checkpoint_dir: Path = None    # saved models
+    results_dir: Path = None       # evaluation outputs
+
+    # ── Image preprocessing ───────────────────────────────────────────────
+    image_size: int = 256
+
+    # ── Superpixel graph ──────────────────────────────────────────────────
+    n_segments: int = 40
+    n_keypoints: int = 25
+    compactness: float = 10.0
+    superpixel_feat_dim: int = 6   # R, G, B, intensity, cx, cy
+
+    # ── Keypoint graph ────────────────────────────────────────────────────
+    knn_k: int = 5
+    keypoint_feat_dim: int = 4     # x, y, intensity, dist_to_center
+
+    # ── GNN model ─────────────────────────────────────────────────────────
+    hidden_dim: int = 128
+    num_gnn_layers: int = 3
+    gat_heads: int = 4
+    dropout: float = 0.3
+
+    # ── Training ──────────────────────────────────────────────────────────
+    lr: float = 1e-3
+    weight_decay: float = 1e-4
+    epochs: int = 50
+    batch_size: int = 32
+    patience: int = 10             # early-stopping patience
+
+    # ── Data split ────────────────────────────────────────────────────────
+    train_ratio: float = 0.70
+    val_ratio: float = 0.15
+    test_ratio: float = 0.15
+    seed: int = 42
+
+    # ── GAN specific params ───────────────────────────────────────────────
+    gan_latent_dim: int = 100
+    gan_hidden_dim: int = 64
+    gan_lr: float = 0.0002
+    gan_epochs: int = 100
+    gan_batch_size: int = 32
+    gan_n_critic: int = 5          # critic iterations per generator iteration
+    gan_lambda_gp: float = 10.0    # gradient penalty weight
+
+    # ── Mode (for ablation) ───────────────────────────────────────────────
+    # "hybrid" | "superpixel_only" | "keypoint_only"
+    model_mode: str = "hybrid"
+
+    def __post_init__(self):
+        if self.data_dir is None:
+            self.data_dir = self.project_root / "endless_forams"
+        if self.processed_dir is None:
+            self.processed_dir = self.project_root / "processed"
+        if self.checkpoint_dir is None:
+            self.checkpoint_dir = self.project_root / "checkpoints"
+        if self.results_dir is None:
+            self.results_dir = self.project_root / "results"
+
+        # Ensure directories exist
+        for d in [self.processed_dir, self.checkpoint_dir, self.results_dir]:
+            d.mkdir(parents=True, exist_ok=True)

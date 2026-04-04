@@ -1,0 +1,22 @@
+# Datasets
+endless_forams/
+dataset/
+_test_data/
+
+# Caches
+processed/
+__pycache__/
+*.pyc
+
+# Model Artefacts
+checkpoints/
+results/
+*.pt
+*.pth
+
+# Environment / IDE
+.env
+venv/
+.venv/
+.idea/
+.vscode/
