@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import torch
 from skimage.segmentation import slic
+from skimage.feature import local_binary_pattern
 from sklearn.neighbors import kneighbors_graph
 from torch_geometric.data import Data
 
@@ -56,8 +57,12 @@ def build_superpixel_graph(
     """
     Build a graph where each node is a SLIC superpixel.
 
-    Node features (6D):
-        mean R, mean G, mean B, mean intensity, centroid_x, centroid_y
+    Node features (14D):
+        mean RGB (3), std RGB (3),
+        mean intensity, std intensity,
+        mean gradient magnitude, std gradient magnitude,
+        mean LBP, std LBP,
+        centroid_x, centroid_y
 
     Edges:
         Region‑adjacency (segments that share a boundary).
@@ -80,19 +85,41 @@ def build_superpixel_graph(
     sid_to_idx = {int(sid): idx for idx, sid in enumerate(seg_ids)}
 
     # ── node features ─────────────────────────────────────────────────────
-    gray = cv2.cvtColor((image * 255).astype(np.uint8), cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
-    features = np.zeros((n_nodes, 6), dtype=np.float32)
+    gray_u8 = cv2.cvtColor((image * 255).astype(np.uint8), cv2.COLOR_RGB2GRAY)
+    gray = gray_u8.astype(np.float32) / 255.0
+    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    grad = cv2.magnitude(gx, gy)
+
+    # LBP on grayscale (uniform patterns)
+    lbp = local_binary_pattern(gray, P=8, R=1, method="uniform").astype(np.float32)
+    if lbp.max() > 0:
+        lbp = lbp / lbp.max()
+
+    features = np.zeros((n_nodes, 14), dtype=np.float32)
 
     for idx, sid in enumerate(seg_ids):
         mask = segments == sid
         ys, xs = np.where(mask)
 
-        features[idx, 0] = image[mask, 0].mean()          # mean R
-        features[idx, 1] = image[mask, 1].mean()          # mean G
-        features[idx, 2] = image[mask, 2].mean()          # mean B
-        features[idx, 3] = gray[mask].mean()               # mean intensity
-        features[idx, 4] = xs.mean() / w                   # centroid x (normalised)
-        features[idx, 5] = ys.mean() / h                   # centroid y (normalised)
+        rgb = image[mask]  # (N, 3)
+        features[idx, 0:3] = rgb.mean(axis=0)                 # mean R,G,B
+        features[idx, 3:6] = rgb.std(axis=0)                  # std R,G,B
+
+        g = gray[mask]
+        features[idx, 6] = float(g.mean())                    # mean intensity
+        features[idx, 7] = float(g.std())                     # std intensity
+
+        gm = grad[mask]
+        features[idx, 8] = float(gm.mean())                   # mean grad magnitude
+        features[idx, 9] = float(gm.std())                    # std grad magnitude
+
+        lb = lbp[mask]
+        features[idx, 10] = float(lb.mean())                  # mean LBP
+        features[idx, 11] = float(lb.std())                   # std LBP
+
+        features[idx, 12] = xs.mean() / w                     # centroid x (normalised)
+        features[idx, 13] = ys.mean() / h                     # centroid y (normalised)
 
     # ── edges via boundary adjacency ──────────────────────────────────────
     adj_pairs = _superpixel_adjacency(segments)
@@ -129,8 +156,9 @@ def build_keypoint_graph(
     """
     Build a graph where each node is a detected keypoint.
 
-    Node features (4D):
-        x, y (normalised), intensity, distance_to_image_centre
+    Node features (8D):
+        x, y (normalised), intensity, distance_to_image_centre,
+        patch mean, patch std, patch gradient mean, patch gradient std
 
     Edges:
         k‑NN on spatial (x, y) coordinates.
@@ -161,7 +189,13 @@ def build_keypoint_graph(
 
     # ── node features ─────────────────────────────────────────────────────
     cx, cy = w / 2.0, h / 2.0
-    features = np.zeros((n_nodes, 4), dtype=np.float32)
+    gray_f = gray.astype(np.float32) / 255.0
+    gx = cv2.Sobel(gray_f, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray_f, cv2.CV_32F, 0, 1, ksize=3)
+    grad = cv2.magnitude(gx, gy)
+
+    features = np.zeros((n_nodes, 8), dtype=np.float32)
+    r = 8  # patch radius (=> 17x17 window)
 
     for i, (px, py) in enumerate(corners):
         ix, iy = int(np.clip(px, 0, w - 1)), int(np.clip(py, 0, h - 1))
@@ -169,6 +203,15 @@ def build_keypoint_graph(
         features[i, 1] = py / h                                    # normalised y
         features[i, 2] = gray[iy, ix] / 255.0                      # intensity
         features[i, 3] = np.sqrt((px - cx)**2 + (py - cy)**2) / np.sqrt(cx**2 + cy**2)  # dist to centre
+
+        y0, y1 = max(0, iy - r), min(h, iy + r + 1)
+        x0, x1 = max(0, ix - r), min(w, ix + r + 1)
+        patch = gray_f[y0:y1, x0:x1]
+        gpatch = grad[y0:y1, x0:x1]
+        features[i, 4] = float(patch.mean())
+        features[i, 5] = float(patch.std())
+        features[i, 6] = float(gpatch.mean())
+        features[i, 7] = float(gpatch.std())
 
     # ── k‑NN edges ────────────────────────────────────────────────────────
     coords = features[:, :2]

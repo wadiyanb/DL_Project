@@ -164,9 +164,15 @@ def generate_synthetic_data(cfg: Config, num_classes: int, target_images_per_cla
     Loads custom Generator and generates samples until every class folder 
     in dataset/images/ has at least `target_images_per_class` total images.
     """
-    ckpt_path = cfg.checkpoint_dir / "gan" / f"gan_ckpt_epoch_{cfg.gan_epochs}.pt"
+    gan_dir = cfg.checkpoint_dir / "gan"
+    ckpt_path = gan_dir / f"gan_ckpt_epoch_{cfg.gan_epochs}.pt"
     if not ckpt_path.exists():
-        raise FileNotFoundError(f"[error] Cannot find GAN checkpoint: {ckpt_path}. Train the GAN first.")
+        # Fall back to the latest available checkpoint.
+        candidates = sorted(gan_dir.glob("gan_ckpt_epoch_*.pt"))
+        if not candidates:
+            raise FileNotFoundError(f"[error] Cannot find any GAN checkpoints in: {gan_dir}. Train the GAN first.")
+        ckpt_path = candidates[-1]
+        print(f"[gan] Using latest checkpoint: {ckpt_path.name}")
     
     print("\n▸ SYNTHESIZING MISSING DATA with WGAN-GP")
     gen = Generator(num_classes, cfg.gan_latent_dim, cfg.gan_hidden_dim).to(device)

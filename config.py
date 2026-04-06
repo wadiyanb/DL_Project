@@ -19,14 +19,16 @@ class Config:
     image_size: int = 256
 
     # ── Superpixel graph ──────────────────────────────────────────────────
-    n_segments: int = 40
-    n_keypoints: int = 25
+    n_segments: int = 80
+    n_keypoints: int = 50
     compactness: float = 10.0
-    superpixel_feat_dim: int = 6   # R, G, B, intensity, cx, cy
+    # meanRGB(3), stdRGB(3), meanI, stdI, gradMean, gradStd, lbpMean, lbpStd, cx, cy
+    superpixel_feat_dim: int = 14
 
     # ── Keypoint graph ────────────────────────────────────────────────────
     knn_k: int = 5
-    keypoint_feat_dim: int = 4     # x, y, intensity, dist_to_center
+    # x, y, intensity, dist_to_center, patchMean, patchStd, patchGradMean, patchGradStd
+    keypoint_feat_dim: int = 8
 
     # ── GNN model ─────────────────────────────────────────────────────────
     hidden_dim: int = 128
@@ -41,11 +43,21 @@ class Config:
     batch_size: int = 32
     patience: int = 10             # early-stopping patience
 
+    # ── Imbalance handling ────────────────────────────────────────────────
+    use_weighted_loss: bool = True
+    use_weighted_sampler: bool = False  # if True, disables DataLoader shuffle
+
     # ── Data split ────────────────────────────────────────────────────────
     train_ratio: float = 0.70
     val_ratio: float = 0.15
     test_ratio: float = 0.15
     seed: int = 42
+
+    # ── LR scheduler ──────────────────────────────────────────────────────
+    use_lr_scheduler: bool = True
+    lr_scheduler_factor: float = 0.5
+    lr_scheduler_patience: int = 2
+    lr_scheduler_min_lr: float = 1e-6
 
     # ── GAN specific params ───────────────────────────────────────────────
     gan_latent_dim: int = 100

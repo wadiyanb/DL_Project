@@ -124,14 +124,26 @@ def split_dataset(
 def save_split_info(
     train: list, val: list, test: list,
     label_map: dict, out_dir: Path,
+    data_dir: Path = None,
 ):
     """Persist split metadata as JSON for reproducibility."""
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    def _maybe_rel(p: str) -> str:
+        if data_dir is None:
+            return p
+        try:
+            return str(Path(p).resolve().relative_to(Path(data_dir).resolve()))
+        except Exception:
+            # If the image path is outside data_dir, keep original (backward-compatible).
+            return p
+
     info = {
+        "path_base": "data_dir" if data_dir is not None else "absolute_or_unknown",
         "label_map": {str(k): v for k, v in label_map.items()},
-        "train": [p for p, _ in train],
-        "val": [p for p, _ in val],
-        "test": [p for p, _ in test],
+        "train": [_maybe_rel(p) for p, _ in train],
+        "val": [_maybe_rel(p) for p, _ in val],
+        "test": [_maybe_rel(p) for p, _ in test],
     }
     with open(out_dir / "split_info.json", "w") as f:
         json.dump(info, f, indent=2)
@@ -144,7 +156,7 @@ if __name__ == "__main__":
     cfg = Config()
     samples, label_map = load_dataset(cfg.data_dir)
     train, val, test = split_dataset(samples, cfg)
-    save_split_info(train, val, test, label_map, cfg.processed_dir)
+    save_split_info(train, val, test, label_map, cfg.processed_dir, data_dir=cfg.data_dir)
 
     # Quick sanity: load & show one image
     sample_path, sample_label = train[0]

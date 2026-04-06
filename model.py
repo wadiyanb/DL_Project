@@ -3,7 +3,7 @@ model.py — Dual GNN architecture for foraminifera classification.
 
 Branch 1  →  SuperpixelGNN  (GraphSAGE)   →  128‑D embedding
 Branch 2  →  KeypointGNN    (GAT)          →  128‑D embedding
-Fusion    →  concat  →  MLP classifier     →  num_classes
+Fusion    →  gated fusion  →  MLP classifier  →  num_classes
 """
 
 import torch
@@ -153,20 +153,24 @@ class DualGNN(nn.Module):
             dropout=cfg.dropout,
         )
 
-        # Classifier head
-        self.fusion_dim = 2 * h
-        
-        # Learnable attention parameters for fusion
-        self.alpha_superpixel = nn.Parameter(torch.tensor(0.5))
-        self.alpha_keypoint = nn.Parameter(torch.tensor(0.5))
-        
-        # The classifier head
-        self.classifier = nn.Sequential(
-            nn.Linear(self.fusion_dim, h),
+        # Gated fusion:
+        # gate = sigmoid(MLP([sp_emb, kp_emb]))  -> (B, h)
+        # fused = gate * sp_emb + (1-gate) * kp_emb
+        self.gate = nn.Sequential(
+            nn.Linear(2 * h, h),
             nn.LayerNorm(h),
             nn.ReLU(inplace=True),
             nn.Dropout(cfg.dropout),
-            nn.Linear(h, num_classes)
+            nn.Linear(h, h),
+            nn.Sigmoid(),
+        )
+
+        self.classifier = nn.Sequential(
+            nn.Linear(h, h),
+            nn.LayerNorm(h),
+            nn.ReLU(inplace=True),
+            nn.Dropout(cfg.dropout),
+            nn.Linear(h, num_classes),
         )
 
     def forward(self, sp_batch, kp_batch):
@@ -184,20 +188,13 @@ class DualGNN(nn.Module):
         out_kp = self.kp_gnn(kp_batch.x, kp_batch.edge_index, kp_batch.batch)
 
         if self.mode == "superpixel_only":
-            out_sp = F.normalize(out_sp, p=2, dim=1)
-            fused = torch.cat([out_sp, torch.zeros_like(out_sp)], dim=-1)
+            fused = F.normalize(out_sp, p=2, dim=1)
         elif self.mode == "keypoint_only":
-            out_kp = F.normalize(out_kp, p=2, dim=1)
-            fused = torch.cat([torch.zeros_like(out_kp), out_kp], dim=-1)
+            fused = F.normalize(out_kp, p=2, dim=1)
         else: # Hybrid
             out_sp = F.normalize(out_sp, p=2, dim=1)
             out_kp = F.normalize(out_kp, p=2, dim=1)
-            
-            # Learnable weighted representation scaling
-            w_sp = torch.sigmoid(self.alpha_superpixel)
-            w_kp = torch.sigmoid(self.alpha_keypoint)
-            
-            # Note: We scale but still concatenate for the classifier to maintain fusion_dim length
-            fused = torch.cat([out_sp * w_sp, out_kp * w_kp], dim=-1)
+            gate = self.gate(torch.cat([out_sp, out_kp], dim=-1))
+            fused = gate * out_sp + (1.0 - gate) * out_kp
 
         return self.classifier(fused)

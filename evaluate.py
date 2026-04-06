@@ -65,10 +65,16 @@ def evaluate_model(
 
     acc = accuracy_score(y_true, y_pred)
     f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
-    report = classification_report(
-        y_true, y_pred, labels=np.arange(len(target_names)),
-        target_names=target_names, zero_division=0
-    )
+    if target_names is None:
+        report = classification_report(y_true, y_pred, zero_division=0)
+    else:
+        report = classification_report(
+            y_true,
+            y_pred,
+            labels=np.arange(len(target_names)),
+            target_names=target_names,
+            zero_division=0,
+        )
 
     return {
         "accuracy": acc,

@@ -27,6 +27,7 @@ import os
 import sys
 import shutil
 import json
+import random
 from pathlib import Path
 
 import numpy as np
@@ -44,6 +45,29 @@ from evaluate import (
     plot_training_curves, compare_models,
 )
 from gan_train import train_gan, generate_synthetic_data
+
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def resolve_split_paths(paths: list, cfg: Config) -> list:
+    """
+    Resolve paths read from split_info.json.
+    - If a path is absolute: keep it (legacy format).
+    - If a path is relative: treat it as relative to cfg.data_dir (portable format).
+    """
+    out = []
+    for p in paths:
+        pp = Path(p)
+        out.append(str(pp if pp.is_absolute() else (cfg.data_dir / pp).resolve()))
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -80,7 +104,7 @@ def step_preprocess(cfg: Config):
     print("\n▸ PREPROCESS")
     samples, label_map = load_dataset(cfg.data_dir)
     train, val, test = split_dataset(samples, cfg)
-    save_split_info(train, val, test, label_map, cfg.processed_dir)
+    save_split_info(train, val, test, label_map, cfg.processed_dir, data_dir=cfg.data_dir)
     return train, val, test, label_map
 
 
@@ -172,6 +196,8 @@ def main():
         cfg.n_keypoints = 15
         cfg.batch_size = 4
 
+    set_seed(cfg.seed)
+
     # ── route to pipeline step ────────────────────────────────────────────
     if args.mode == "preprocess":
         step_preprocess(cfg)
@@ -203,12 +229,16 @@ def main():
             with open(split_file) as f:
                 info = json.load(f)
             label_map = {int(k): v for k, v in info["label_map"].items()}
+            train_paths = resolve_split_paths(info["train"], cfg)
+            val_paths = resolve_split_paths(info["val"], cfg)
+            test_paths = resolve_split_paths(info["test"], cfg)
+
             # Re-load raw samples for labels
             samples, _ = load_dataset(cfg.data_dir)
-            path_to_label = {p: l for p, l in samples}
-            train = [(p, path_to_label[p]) for p in info["train"] if p in path_to_label]
-            val = [(p, path_to_label[p]) for p in info["val"] if p in path_to_label]
-            test = [(p, path_to_label[p]) for p in info["test"] if p in path_to_label]
+            path_to_label = {str(Path(p).resolve()): l for p, l in samples}
+            train = [(p, path_to_label[p]) for p in train_paths if p in path_to_label]
+            val = [(p, path_to_label[p]) for p in val_paths if p in path_to_label]
+            test = [(p, path_to_label[p]) for p in test_paths if p in path_to_label]
 
         num_classes = len(label_map)
         train_loader, val_loader, test_loader = get_dataloaders(
