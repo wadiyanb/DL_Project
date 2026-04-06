@@ -150,6 +150,60 @@ def save_split_info(
     print(f"[data] Split info saved to {out_dir / 'split_info.json'}")
 
 
+def augment_offline(data_dir: Path, target_count: int = 500):
+    """
+    Offline data augmentation to balance minority classes using basic transforms:
+    Horizontal/Vertical Flip, Rotation, and Brightness/Contrast Jitter.
+    Generated images are saved to the class directory.
+    """
+    print(f"\n[data] Running Offline Augmentation targeting {target_count} samples per class.")
+    samples, label_map = load_dataset(data_dir)
+    
+    # Count current images per class
+    counts = {name: 0 for name in label_map.values()}
+    for _, l in samples:
+        counts[label_map[l]] += 1
+        
+    for class_idx, cls_name in label_map.items():
+        current_count = counts[cls_name]
+        if current_count < target_count:
+            missing = target_count - current_count
+            print(f"  Augmenting {missing:4d} images for {cls_name} ...")
+            cls_dir = data_dir / cls_name
+            
+            # Collect existing images to use as source for augmentation
+            class_imgs = [p for p, l in samples if l == class_idx]
+            if len(class_imgs) == 0:
+                print(f"  Warning: No images found for {cls_name}, skipping.")
+                continue
+            
+            for i in range(missing):
+                src_path = class_imgs[i % len(class_imgs)]
+                img = cv2.imread(src_path, cv2.IMREAD_COLOR)
+                if img is None: continue
+                
+                # Random Augmentations
+                # 1. Flip
+                flip_code = np.random.choice([-1, 0, 1, 2])
+                if flip_code != 2:
+                    img = cv2.flip(img, flip_code)
+                
+                # 2. Rotate
+                angle = np.random.uniform(-45, 45)
+                h, w = img.shape[:2]
+                M = cv2.getRotationMatrix2D((w/2, h/2), angle, 1.0)
+                img = cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_REFLECT)
+                
+                # 3. Brightness/Contrast
+                alpha = np.random.uniform(0.8, 1.2) # Contrast
+                beta = np.random.uniform(-30, 30)   # Brightness
+                img = cv2.convertScaleAbs(img, alpha=alpha, beta=beta)
+                
+                save_path = cls_dir / f"aug_{i:05d}_{Path(src_path).name}"
+                cv2.imwrite(str(save_path), img)
+                
+    print("[data] Offline Augmentation Complete!")
+
 # ── CLI helper ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

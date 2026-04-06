@@ -150,7 +150,7 @@ def main():
     )
     parser.add_argument(
         "--mode", type=str, default="full",
-        choices=["preprocess", "train", "evaluate", "full", "ablation", "gan_train", "gan_generate"],
+        choices=["preprocess", "train", "evaluate", "full", "ablation", "gan_train", "gan_generate", "augment_offline"],
         help="Pipeline step to run.",
     )
     parser.add_argument("--data_dir", type=str, default=None, help="Path to images/")
@@ -207,6 +207,11 @@ def main():
         samples, label_map = load_dataset(cfg.data_dir)
         num_classes = len(label_map)
         train_gan(cfg, num_classes, device)
+        return
+        
+    if args.mode == "augment_offline":
+        from data_preprocessing import augment_offline
+        augment_offline(cfg.data_dir, args.target_count)
         return
         
     if args.mode == "gan_generate":

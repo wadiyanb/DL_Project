@@ -13,6 +13,27 @@ from tqdm import tqdm
 
 from config import Config
 from model import DualGNN
+import torch.nn.functional as F
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=None, gamma=2.0, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha  # Can be a tensor of class weights
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        ce_loss = F.cross_entropy(inputs, targets, reduction='none', weight=self.alpha)
+        pt = torch.exp(-ce_loss)
+        focal_loss = ((1 - pt) ** self.gamma) * ce_loss
+        
+        if self.reduction == 'mean':
+            return focal_loss.mean()
+        elif self.reduction == 'sum':
+            return focal_loss.sum()
+        else:
+            return focal_loss
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -75,6 +96,7 @@ def run_training(
     val_loader,
     cfg: Config,
     device: torch.device,
+    class_weights: torch.Tensor = None,
 ):
     """
     Full training loop with:
@@ -102,7 +124,10 @@ def run_training(
             w = torch.clamp(w, max=max_w)
             class_weights = w.to(device)
 
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    if getattr(cfg, "use_focal_loss", False):
+        criterion = FocalLoss(alpha=class_weights, gamma=getattr(cfg, "focal_loss_gamma", 2.0))
+    else:
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = Adam(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     scheduler = None
     if cfg.use_lr_scheduler:

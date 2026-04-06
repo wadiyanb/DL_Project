@@ -45,6 +45,10 @@ class Config:
 
     # ── Imbalance handling ────────────────────────────────────────────────
     use_weighted_loss: bool = True
+    class_weight_power: float = 0.5
+    max_class_weight: float = 5.0
+    use_focal_loss: bool = True
+    focal_loss_gamma: float = 2.0
     use_weighted_sampler: bool = False  # if True, disables DataLoader shuffle
 
     # ── Data split ────────────────────────────────────────────────────────
