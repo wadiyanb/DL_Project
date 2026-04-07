@@ -164,7 +164,7 @@ def main():
         choices=["hybrid", "superpixel_only", "keypoint_only"],
     )
     parser.add_argument("--test", action="store_true", help="Use synthetic data for smoke test")
-    parser.add_argument("--target_count", type=int, default=500, help="Target number of images per class after GAN synthesis")
+    parser.add_argument("--target_count", type=int, default=0, help="Target number of images per class after GAN synthesis or Augmentation (0=auto-max)")
     args = parser.parse_args()
 
     # ── config ────────────────────────────────────────────────────────────

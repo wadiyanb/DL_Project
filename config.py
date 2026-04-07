@@ -31,7 +31,7 @@ class Config:
     keypoint_feat_dim: int = 8
 
     # ── GNN model ─────────────────────────────────────────────────────────
-    hidden_dim: int = 128
+    hidden_dim: int = 256
     num_gnn_layers: int = 3
     gat_heads: int = 4
     dropout: float = 0.3
@@ -45,7 +45,7 @@ class Config:
 
     # ── Imbalance handling ────────────────────────────────────────────────
     use_weighted_loss: bool = True
-    class_weight_power: float = 0.5
+    class_weight_power: float = 1.0
     max_class_weight: float = 5.0
     use_focal_loss: bool = True
     focal_loss_gamma: float = 2.0

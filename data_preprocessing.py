@@ -150,24 +150,26 @@ def save_split_info(
     print(f"[data] Split info saved to {out_dir / 'split_info.json'}")
 
 
-def augment_offline(data_dir: Path, target_count: int = 500):
+def augment_offline(data_dir: Path, target_count: int = 0):
     """
-    Offline data augmentation to balance minority classes using basic transforms:
-    Horizontal/Vertical Flip, Rotation, and Brightness/Contrast Jitter.
-    Generated images are saved to the class directory.
+    Offline data augmentation to balance minority classes using basic transforms.
+    If target_count is 0, figures out the maximum class count and balances all
+    classes up to that maximum threshold.
     """
-    print(f"\n[data] Running Offline Augmentation targeting {target_count} samples per class.")
+    print(f"\n[data] Running Offline Augmentation")
     samples, label_map = load_dataset(data_dir)
     
-    # Count current images per class
     counts = {name: 0 for name in label_map.values()}
     for _, l in samples:
         counts[label_map[l]] += 1
         
+    actual_target = target_count if target_count > 0 else max(counts.values())
+    print(f"[data] Target class count decided: {actual_target}")
+        
     for class_idx, cls_name in label_map.items():
         current_count = counts[cls_name]
-        if current_count < target_count:
-            missing = target_count - current_count
+        if current_count < actual_target:
+            missing = actual_target - current_count
             print(f"  Augmenting {missing:4d} images for {cls_name} ...")
             cls_dir = data_dir / cls_name
             

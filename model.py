@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import (
-    SAGEConv, GATConv, global_mean_pool, LayerNorm
+    SAGEConv, GATConv, EdgeConv, global_mean_pool, LayerNorm
 )
 
 from config import Config
@@ -72,7 +72,7 @@ class SuperpixelGNN(nn.Module):
 
 class KeypointGNN(nn.Module):
     """
-    Multi‑layer GAT on the keypoint (structure) graph.
+    Multi‑layer EdgeConv on the keypoint (structure) graph.
     Outputs a fixed‑size graph‑level embedding.
     """
 
@@ -82,26 +82,36 @@ class KeypointGNN(nn.Module):
         hidden_dim: int = 128,
         out_dim: int = 128,
         num_layers: int = 3,
-        heads: int = 4,
+        heads: int = 4, # Kept for signature compatibility but not used by EdgeConv
         dropout: float = 0.3,
     ):
         super().__init__()
         self.convs = nn.ModuleList()
         self.bns = nn.ModuleList()
 
-        # First layer: in → hidden (multi‑head)
-        self.convs.append(GATConv(in_dim, hidden_dim // heads, heads=heads, concat=True))
+        # First layer: in → hidden
+        self.convs.append(EdgeConv(nn.Sequential(
+            nn.Linear(2 * in_dim, hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_dim, hidden_dim)
+        ), aggr='max'))
         self.bns.append(LayerNorm(hidden_dim))
 
         # Hidden layers
         for _ in range(num_layers - 2):
-            self.convs.append(
-                GATConv(hidden_dim, hidden_dim // heads, heads=heads, concat=True)
-            )
+            self.convs.append(EdgeConv(nn.Sequential(
+                nn.Linear(2 * hidden_dim, hidden_dim),
+                nn.ReLU(inplace=True),
+                nn.Linear(hidden_dim, hidden_dim)
+            ), aggr='max'))
             self.bns.append(LayerNorm(hidden_dim))
 
-        # Last layer → out_dim  (single head for clean output)
-        self.convs.append(GATConv(hidden_dim, out_dim, heads=1, concat=False))
+        # Last layer → out_dim
+        self.convs.append(EdgeConv(nn.Sequential(
+            nn.Linear(2 * hidden_dim, hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_dim, out_dim)
+        ), aggr='max'))
         self.bns.append(LayerNorm(out_dim))
 
         self.dropout = dropout
